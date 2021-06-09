@@ -320,6 +320,15 @@ func resourceAwsRedshiftCluster() *schema.Resource {
 				Optional: true,
 			},
 
+			"maintenance_track_name": {
+				Type:     schema.TypeString,
+				Optional: true,
+				ValidateFunc: validation.StringInSlice([]string{
+					"trailing",
+					"current",
+				}, false),
+			},
+
 			"tags":     tagsSchema(),
 			"tags_all": tagsSchemaComputed(),
 		},
@@ -399,6 +408,12 @@ func resourceAwsRedshiftClusterCreate(d *schema.ResourceData, meta interface{}) 
 
 		if v, ok := d.GetOk("iam_roles"); ok {
 			restoreOpts.IamRoles = expandStringSet(v.(*schema.Set))
+		}
+
+		log.Printf("[Info] Getting into maintenance_track_name in snapshot identifier branch")
+		if v, ok := d.GetOk("maintenance_track_name"); ok {
+			log.Printf("[Info] In maintenance_track_name in snapshot identifier branch")
+			restoreOpts.MaintenanceTrackName = aws.String(v.(string))
 		}
 
 		log.Printf("[DEBUG] Redshift Cluster restore cluster options: %s", restoreOpts)
@@ -483,6 +498,10 @@ func resourceAwsRedshiftClusterCreate(d *schema.ResourceData, meta interface{}) 
 
 		if v, ok := d.GetOk("iam_roles"); ok {
 			createOpts.IamRoles = expandStringSet(v.(*schema.Set))
+		}
+
+		if v, ok := d.GetOk("maintenance_track_name"); ok {
+			createOpts.MaintenanceTrackName = aws.String(v.(string))
 		}
 
 		log.Printf("[DEBUG] Redshift Cluster create options: %s", createOpts)
@@ -638,6 +657,8 @@ func resourceAwsRedshiftClusterRead(d *schema.ResourceData, meta interface{}) er
 
 	d.Set("snapshot_copy", flattenRedshiftSnapshotCopy(rsc.ClusterSnapshotCopyStatus))
 
+	d.Set("maintenance_track_name", rsc.MaintenanceTrackName)
+
 	if err := d.Set("logging", flattenRedshiftLogging(loggingStatus)); err != nil {
 		return fmt.Errorf("error setting logging: %s", err)
 	}
@@ -743,6 +764,11 @@ func resourceAwsRedshiftClusterUpdate(d *schema.ResourceData, meta interface{}) 
 
 	if d.Get("encrypted").(bool) && d.HasChange("kms_key_id") {
 		req.KmsKeyId = aws.String(d.Get("kms_key_id").(string))
+		requestUpdate = true
+	}
+
+	if d.HasChange("maintenance_track_name") {
+		req.MaintenanceTrackName = aws.String(d.Get("maintenance_track_name").(string))
 		requestUpdate = true
 	}
 
